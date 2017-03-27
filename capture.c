@@ -27,6 +27,9 @@
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
+#define YUYV_FMT	1
+#define MJPG_FMT	2
+
 enum io_method {
         IO_METHOD_READ,
         IO_METHOD_MMAP,
@@ -482,7 +485,7 @@ static void init_device(void)
         CLEAR(fmt);
 
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        if (force_format) {
+        if (force_format == YUYV_FMT) {
                 fmt.fmt.pix.width       = 640;
                 fmt.fmt.pix.height      = 480;
                 fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
@@ -492,6 +495,13 @@ static void init_device(void)
                         errno_exit("VIDIOC_S_FMT");
 
                 /* Note VIDIOC_S_FMT may change width and height. */
+        } else if (force_format == MJPG_FMT) {
+                fmt.fmt.pix.width       = 1280;
+                fmt.fmt.pix.height      = 720;
+                fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+                fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED;
+                if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
+                        errno_exit("VIDIOC_S_FMT");
         } else {
                 /* Preserve original settings as set by v4l2-ctl for example */
                 if (-1 == xioctl(fd, VIDIOC_G_FMT, &fmt))
@@ -556,22 +566,24 @@ static void open_device(void)
 static void usage(FILE *fp, int argc, char **argv)
 {
         fprintf(fp,
-                 "Usage: %s [options]\\n\\n"
-                 "Version 1.3\\n"
-                 "Options:\\n"
-                 "-d | --device name   Video device name [%s]n"
-                 "-h | --help          Print this messagen"
-                 "-m | --mmap          Use memory mapped buffers [default]n"
-                 "-r | --read          Use read() callsn"
-                 "-u | --userp         Use application allocated buffersn"
-                 "-o | --output        Outputs stream to stdoutn"
-                 "-f | --format        Force format to 640x480 YUYVn"
-                 "-c | --count         Number of frames to grab [%i]n"
+                 "Usage: %s [options]\n"
+                 "Version 1.3\n"
+                 "Options:\n"
+                 "-d | --device name   Video device name [%s]\n"
+                 "-h | --help          Print this message\n"
+                 "-m | --mmap          Use memory mapped buffers [default]\n"
+                 "-r | --read          Use read() calls\n"
+                 "-u | --userp         Use application allocated buffers\n"
+                 "-o | --output        Outputs stream to stdout\n"
+                 "-f | --format        Force format to 640x480 YUYV\n"
+                 "-J | --fmjpeg        Force format to 1280x720 MJPEG\n"
+                 "-c | --count         Number of frames to grab [%i]\n"
+                 "Example: ./a.out -J -m -o > file\n"
                  "",
                  argv[0], dev_name, frame_count);
 }
 
-static const char short_options[] = "d:hmruofc:";
+static const char short_options[] = "d:hmruofJc:";
 
 static const struct option
 long_options[] = {
@@ -582,6 +594,7 @@ long_options[] = {
         { "userp",  no_argument,       NULL, 'u' },
         { "output", no_argument,       NULL, 'o' },
         { "format", no_argument,       NULL, 'f' },
+        { "fmjpeg", no_argument,       NULL, 'J' },
         { "count",  required_argument, NULL, 'c' },
         { 0, 0, 0, 0 }
 };
@@ -629,7 +642,12 @@ int main(int argc, char **argv)
                         break;
 
                 case 'f':
-                        force_format++;
+                        force_format = YUYV_FMT;
+                        break;
+
+                case 'J':
+			puts("MJPEG");
+                        force_format = MJPG_FMT;
                         break;
 
                 case 'c':

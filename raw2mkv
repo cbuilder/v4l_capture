@@ -1,0 +1,7 @@
+#!/bin/bash
+
+echo "Converting raw mjpeg file to matroska container"
+
+avconv -f mjpeg -i $1 -vcodec copy output.mkv
+
+echo "Finished output.mkv"
