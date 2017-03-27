@@ -577,6 +577,7 @@ static void usage(FILE *fp, int argc, char **argv)
                  "-o | --output        Outputs stream to stdout\n"
                  "-f | --format        Force format to 640x480 YUYV\n"
                  "-J | --fmjpeg        Force format to 1280x720 MJPEG\n"
+                 "-E | --enc           Encode to H.264\n"
                  "-c | --count         Number of frames to grab [%i]\n"
                  "Example: ./a.out -J -m -o > file\n"
                  "",
@@ -646,7 +647,6 @@ int main(int argc, char **argv)
                         break;
 
                 case 'J':
-			puts("MJPEG");
                         force_format = MJPG_FMT;
                         break;
 

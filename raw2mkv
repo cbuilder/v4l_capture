@@ -1,7 +1,9 @@
 #!/bin/bash
 
-echo "Converting raw mjpeg file to matroska container"
+echo "Converting raw mjpeg/yuyv422 file to matroska container"
 
-avconv -f mjpeg -i $1 -vcodec copy output.mkv
+avconv -f rawvideo -vcodec rawvideo -s 640x480 -r 25 -pix_fmt yuyv422 -i file -c:v libx264 -preset ultrafast -qp 0 output.mp4
+
+#avconv -f mjpeg -i $1 -vcodec copy output.mkv
 
 echo "Finished output.mkv"
