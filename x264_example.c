@@ -68,7 +68,7 @@ int main( int argc, char **argv )
         goto fail;
 
     /* Configure non-default params */
-    param.i_csp = X264_CSP_I422;
+    param.i_csp = X264_CSP_I420;
     param.i_width  = width;
     param.i_height = height;
     param.b_vfr_input = 0;
@@ -76,7 +76,7 @@ int main( int argc, char **argv )
     param.b_annexb = 1;
 
     /* Apply profile restrictions. */
-    if( x264_param_apply_profile( &param, "high422" ) < 0 )
+    if( x264_param_apply_profile( &param, "high" ) < 0 )
         goto fail;
 
     if( x264_picture_alloc( &pic, param.i_csp, param.i_width, param.i_height ) < 0 )
