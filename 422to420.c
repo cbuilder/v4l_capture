@@ -1,5 +1,5 @@
 /*****************************************************************
-File YUV422toYUV420.cpp
+File 422to420.c
 
 Utility for converting a sequence of frames, stored in a single
 file in raw YUV422 format, to a single output file in which they are
@@ -53,11 +53,13 @@ int main(int argc, char * argv[] ) {
             return EXIT_FAILURE;
         }
     
+        /* The algoritm can be optimised
+        by capturing Luma and Chroma components at one pass */
         int x,y;
         for (x = 0, y = 0; x < FrameInSize; x+=2,y++) {
             YBufOut[y] = FrameIn[x];
         }
- 
+
         int u = 0;
         for (y = 0; y < height; y+=2) {
             for (x = 0; x < width*2; x+=4) {
