@@ -24,16 +24,27 @@
 #include <sys/ioctl.h>
 
 #include <linux/videodev2.h>
+#include "x264_encoder.h"
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
 #define YUYV_FMT	1
 #define MJPG_FMT	2
 
+#define WIDTH	640
+#define HEIGHT	480
+#define YUV422_FRAME_SIZE	WIDTH*HEIGHT*2
+#define YUV420_FRAME_SIZE	WIDTH*HEIGHT*1.5
+
 enum io_method {
         IO_METHOD_READ,
         IO_METHOD_MMAP,
         IO_METHOD_USERPTR,
+};
+
+enum encoder {
+        ENC_X264 = 1,
+        ENC_VPU264,
 };
 
 struct buffer {
@@ -49,6 +60,7 @@ static unsigned int     n_buffers;
 static int              out_buf;
 static int              force_format;
 static int              frame_count = 70;
+static int              encode;
 
 static void errno_exit(const char *s)
 {
@@ -67,11 +79,56 @@ static int xioctl(int fh, int request, void *arg)
         return r;
 }
 
+void yuy422to420(int width, int height, unsigned char *FrameIn, unsigned char *FrameOut)
+{
+        int x,y,u,v;
+        const int FrameInSize = width*height*2;
+        const int YBufOutSize = height*width;
+        const int UVBufOutSize = height*width/4;
+        for (x = 0, u = 0; x < FrameInSize; x+=2, u++) {
+            FrameOut[u] = FrameIn[x];
+        }
+        u = YBufOutSize;
+        v = YBufOutSize + UVBufOutSize;
+        for (y = 0; y < height; y+=2) {
+            for (x = 0; x < width*2; x+=4) {
+                FrameOut[u] = (FrameIn[1+x+y*width*2] + FrameIn[1+x+(y+1)*width*2])/2;
+                u++;
+                FrameOut[v] = (FrameIn[3+x+y*width*2] + FrameIn[3+x+(y+1)*width*2])/2;
+                v++;
+            }
+        }
+}
+
 static void process_image(const void *p, int size)
 {
-        if (out_buf)
-                fwrite(p, size, 1, stdout);
+        unsigned char* src;
+        unsigned char* dst;
+        unsigned char* dst_enc;
+        int size_out;
 
+        if (force_format == YUYV_FMT || encode == ENC_X264) {
+                src = (unsigned char*)p;
+		size_out = YUV420_FRAME_SIZE;
+                dst = malloc(size_out * sizeof(char));
+                yuy422to420(WIDTH, HEIGHT, src, dst);
+                if (encode == ENC_X264) {
+                    size_out = h264_encode(WIDTH, HEIGHT, dst, &dst_enc);
+                    fprintf(stderr, "sz=%d ",size_out);
+                }
+        } else {
+		dst = (unsigned char*)p;
+        }
+
+        if (out_buf) {
+                if (encode) {
+                    if (size_out > 0)
+                        fwrite(dst_enc, size_out, 1, stdout);
+                }
+                else fwrite(dst, size, 1, stdout);
+        }
+
+        free(dst);
         fflush(stderr);
         fprintf(stderr, ".");
         fflush(stdout);
@@ -486,8 +543,8 @@ static void init_device(void)
 
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         if (force_format == YUYV_FMT) {
-                fmt.fmt.pix.width       = 640;
-                fmt.fmt.pix.height      = 480;
+                fmt.fmt.pix.width       = WIDTH;
+                fmt.fmt.pix.height      = HEIGHT;
                 fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
                 fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED;
 
@@ -496,8 +553,8 @@ static void init_device(void)
 
                 /* Note VIDIOC_S_FMT may change width and height. */
         } else if (force_format == MJPG_FMT) {
-                fmt.fmt.pix.width       = 1280;
-                fmt.fmt.pix.height      = 720;
+                fmt.fmt.pix.width       = WIDTH;
+                fmt.fmt.pix.height      = HEIGHT;
                 fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
                 fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED;
                 if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
@@ -577,14 +634,15 @@ static void usage(FILE *fp, int argc, char **argv)
                  "-o | --output        Outputs stream to stdout\n"
                  "-f | --format        Force format to 640x480 YUYV\n"
                  "-J | --fmjpeg        Force format to 1280x720 MJPEG\n"
-                 "-E | --enc           Encode to H.264\n"
+                 "-X | --x264          Encode to H.264 using libx264\n"
+                 "-V | --vpu264        Encode to H.264 using IMX6 VPU\n"
                  "-c | --count         Number of frames to grab [%i]\n"
                  "Example: ./a.out -J -m -o > file\n"
                  "",
                  argv[0], dev_name, frame_count);
 }
 
-static const char short_options[] = "d:hmruofJc:";
+static const char short_options[] = "d:hmruofJcXH:";
 
 static const struct option
 long_options[] = {
@@ -597,6 +655,8 @@ long_options[] = {
         { "format", no_argument,       NULL, 'f' },
         { "fmjpeg", no_argument,       NULL, 'J' },
         { "count",  required_argument, NULL, 'c' },
+        { "x264",   no_argument,       NULL, 'X' },
+        { "vpu264", no_argument,       NULL, 'V' },
         { 0, 0, 0, 0 }
 };
 
@@ -657,6 +717,14 @@ int main(int argc, char **argv)
                                 errno_exit(optarg);
                         break;
 
+                case 'X':
+                        encode = ENC_X264;
+                        break;
+
+                case 'V':
+                        encode = ENC_VPU264;
+                        break;
+
                 default:
                         usage(stderr, argc, argv);
                         exit(EXIT_FAILURE);
@@ -665,11 +733,15 @@ int main(int argc, char **argv)
 
         open_device();
         init_device();
+        if (encode == ENC_X264)
+            h264_init(WIDTH, HEIGHT);
         start_capturing();
         mainloop();
         stop_capturing();
         uninit_device();
         close_device();
-        fprintf(stderr, "\\n");
+        if (encode == ENC_X264)
+            h264_close();
+        fprintf(stderr, "\n");
         return 0;
 }
