@@ -55,7 +55,7 @@ int h264_encode(int width, int height, unsigned char *FrameIn, unsigned char **F
     memcpy(pic.img.plane[1], FrameIn + luma_size, chroma_size);
     memcpy(pic.img.plane[2], FrameIn + (luma_size+chroma_size), chroma_size);
 
-    pic.i_pts = 0;
+    pic.i_pts = i_frame++;
     i_frame_size = x264_encoder_encode( h, &nal, &i_nal, &pic, &pic_out );
     if (i_frame_size)
         *FrameOut = nal->p_payload;

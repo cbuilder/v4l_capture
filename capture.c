@@ -25,6 +25,7 @@
 
 #include <linux/videodev2.h>
 #include "x264_encoder.h"
+#include "rtp.h"
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
@@ -61,6 +62,9 @@ static int              out_buf;
 static int              force_format;
 static int              frame_count = 70;
 static int              encode;
+static int              rtp;
+static char		rtphost[12];
+static int		rtpport;
 
 static void errno_exit(const char *s)
 {
@@ -124,8 +128,12 @@ static void process_image(const void *p, int size)
                 if (encode) {
                     if (size_out > 0)
                         fwrite(dst_enc, size_out, 1, stdout);
-                }
-                else fwrite(dst, size, 1, stdout);
+                } else
+                     fwrite(dst, size, 1, stdout);
+        }
+        if (rtp) {
+                if (size_out > 0)
+                        rtp_send(dst_enc, size_out);
         }
 
         free(dst);
@@ -636,13 +644,15 @@ static void usage(FILE *fp, int argc, char **argv)
                  "-J | --fmjpeg        Force format to 1280x720 MJPEG\n"
                  "-X | --x264          Encode to H.264 using libx264\n"
                  "-V | --vpu264        Encode to H.264 using IMX6 VPU\n"
+                 "-R | --rtpip         Send to remote host in RTP\n"
+                 "-P | --rtpport       Send to remote port in RTP\n"
                  "-c | --count         Number of frames to grab [%i]\n"
                  "Example: ./a.out -J -m -o > file\n"
                  "",
                  argv[0], dev_name, frame_count);
 }
 
-static const char short_options[] = "d:hmruofJcXH:";
+static const char short_options[] = "d:hmruofJcXVRP:";
 
 static const struct option
 long_options[] = {
@@ -657,6 +667,8 @@ long_options[] = {
         { "count",  required_argument, NULL, 'c' },
         { "x264",   no_argument,       NULL, 'X' },
         { "vpu264", no_argument,       NULL, 'V' },
+        { "rtphost",  required_argument, NULL, 'R' },
+        { "rtpport",required_argument, NULL, 'P' },
         { 0, 0, 0, 0 }
 };
 
@@ -725,6 +737,15 @@ int main(int argc, char **argv)
                         encode = ENC_VPU264;
                         break;
 
+                case 'R':
+                        rtp = 1;
+                        strcpy(rtphost, optarg);
+                        break;
+
+                case 'P':
+                        rtpport = strtol(optarg, NULL, 0);
+                        break;
+
                 default:
                         usage(stderr, argc, argv);
                         exit(EXIT_FAILURE);
@@ -735,6 +756,10 @@ int main(int argc, char **argv)
         init_device();
         if (encode == ENC_X264)
             h264_init(WIDTH, HEIGHT);
+        if (rtp) {
+            if (!rtpport) rtpport = 5004;
+            rtp_init(rtphost, rtpport);
+        }
         start_capturing();
         mainloop();
         stop_capturing();
@@ -742,6 +767,8 @@ int main(int argc, char **argv)
         close_device();
         if (encode == ENC_X264)
             h264_close();
+        if (rtp)
+            rtp_exit();
         fprintf(stderr, "\n");
         return 0;
 }
