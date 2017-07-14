@@ -136,7 +136,9 @@ static void process_image(const void *p, int size)
                         rtp_send(dst_enc, size_out);
         }
 
-        free(dst);
+        if (force_format == YUYV_FMT || encode == ENC_X264) {
+                free(dst);
+        }
         fflush(stderr);
         fprintf(stderr, ".");
         fflush(stdout);
