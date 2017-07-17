@@ -32,8 +32,8 @@
 #define YUYV_FMT	1
 #define MJPG_FMT	2
 
-#define WIDTH	640
-#define HEIGHT	480
+#define WIDTH	320
+#define HEIGHT	240
 #define YUV422_FRAME_SIZE	WIDTH*HEIGHT*2
 #define YUV420_FRAME_SIZE	WIDTH*HEIGHT*1.5
 
